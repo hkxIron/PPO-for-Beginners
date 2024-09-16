@@ -5,6 +5,8 @@
 	which resides in ppo.py. Thus, we can test our trained policy without 
 	relying on ppo.py.
 """
+from torch import nn
+from gym import Env
 
 def _log_summary(ep_len, ep_ret, ep_num):
 		"""
@@ -50,8 +52,8 @@ def rollout(policy, env, render):
 	"""
 	# Rollout until user kills process
 	while True:
-		obs = env.reset()
-		done = False
+		observation, info = env.reset()
+		is_done = False
 
 		# number of timesteps so far
 		t = 0
@@ -60,7 +62,7 @@ def rollout(policy, env, render):
 		ep_len = 0            # episodic length
 		ep_ret = 0            # episodic return
 
-		while not done:
+		while not is_done:
 			t += 1
 
 			# Render environment if specified, off by default
@@ -68,11 +70,11 @@ def rollout(policy, env, render):
 				env.render()
 
 			# Query deterministic action from policy and run it
-			action = policy(obs).detach().numpy()
-			obs, rew, done, _ = env.step(action)
+			action = policy(observation).detach().numpy()
+			observation, reward, is_done, is_truncated, _ = env.step(action)
 
 			# Sum all episodic rewards as we go along
-			ep_ret += rew
+			ep_ret += reward
 			
 		# Track episodic length
 		ep_len = t
@@ -80,7 +82,7 @@ def rollout(policy, env, render):
 		# returns episodic length and return in this iteration
 		yield ep_len, ep_ret
 
-def eval_policy(policy, env, render=False):
+def eval_policy(policy:nn.Module, env:Env, render=False):
 	"""
 		The main function to evaluate our policy with. It will iterate a generator object
 		"rollout", which will simulate each episode and return the most recent episode's

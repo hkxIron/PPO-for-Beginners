@@ -12,7 +12,7 @@ class FeedForwardNN(nn.Module):
 	"""
 		A standard in_dim-64-64-out_dim Feed Forward Neural Network.
 	"""
-	def __init__(self, in_dim, out_dim):
+	def __init__(self, in_dim:int, out_dim:int):
 		"""
 			Initialize the network and set up the layers.
 
@@ -25,11 +25,12 @@ class FeedForwardNN(nn.Module):
 		"""
 		super(FeedForwardNN, self).__init__()
 
+		# 一个三层的网络
 		self.layer1 = nn.Linear(in_dim, 64)
 		self.layer2 = nn.Linear(64, 64)
 		self.layer3 = nn.Linear(64, out_dim)
 
-	def forward(self, obs):
+	def forward(self, observation:np.ndarray):
 		"""
 			Runs a forward pass on the neural network.
 
@@ -40,10 +41,10 @@ class FeedForwardNN(nn.Module):
 				output - the output of our forward pass
 		"""
 		# Convert observation to tensor if it's a numpy array
-		if isinstance(obs, np.ndarray):
-			obs = torch.tensor(obs, dtype=torch.float)
+		if isinstance(observation, np.ndarray):
+			observation = torch.tensor(observation, dtype=torch.float)
 
-		activation1 = F.relu(self.layer1(obs))
+		activation1 = F.relu(self.layer1(observation))
 		activation2 = F.relu(self.layer2(activation1))
 		output = self.layer3(activation2)
 
