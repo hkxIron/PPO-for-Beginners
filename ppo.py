@@ -69,7 +69,7 @@ class PPO:
 			'critic_losses': [],  # losses of actor network in current iteration
 		}
 
-	def learn(self, total_timesteps:int):
+	def learn(self, total_timesteps:int=200_000_000):
 		"""
 			Train the actor and critic networks. Here is where the main PPO algorithm resides.
 
@@ -117,7 +117,7 @@ class PPO:
 			# but in practice it decreases the variance of
 			# our advantages and makes convergence much more stable and faster.
 			# I added this because solving some environments was too unstable without it.
-			advantage_k = (advantage_k - advantage_k.mean()) / (advantage_k.std() + 1e-10) # 用方差归一化是额外添加的,会更稳定
+			advantage_k = (advantage_k - advantage_k.mean()) / (advantage_k.std() + 1e-10) # 用均值方差归一化是额外添加的,会更稳定
 
 			# This is the loop where we update our network for some n epochs
 			for _ in range(self.n_updates_per_iteration): # ALG STEP 6 & 7, 每次迭代更新模型10次
@@ -231,7 +231,7 @@ class PPO:
 
 		# 继续实验，直到我们每批运⾏超过或等于指定的时间步数
 		# Keep simulating until we've run more than or equal to specified timesteps per batch
-		while total_timestep < self.timesteps_per_batch: # 4800
+		while total_timestep < self.timesteps_per_batch: # timestep_per_batch: 4800
 			episode_rewards = [] # rewards collected per episode, 每回合收集的奖励
 
 			# 重置环境
@@ -241,7 +241,7 @@ class PPO:
 
 			# Run an episode for a maximum of max_timesteps_per_episode timesteps
 			timestep_in_episode=-1
-			for timestep_in_episode in range(self.max_timesteps_per_episode): # 每一局棋最多下多少步
+			for timestep_in_episode in range(self.max_timesteps_per_episode): # 每一局棋最多下多少步, eg:200步
 				# If render is specified, render the environment
 				if self.render and (self.logger['i_so_far'] % self.render_every_i == 0) and len(batch_lens) == 0:
 					self.env.render()
@@ -249,13 +249,21 @@ class PPO:
 				total_timestep += 1 # Increment timesteps ran this batch so far
 
 				# Track observations in this batch
+				# batch_observation:[timestep, state_dim=3]
 				batch_observation.append(observation) # observation:[state_dim=3]
 
 				# Calculate action and make a step in the env. observation:[state_dim=3], 3维向量
+				# action:[action_dim=1]
+				# log_prob:标量
 				action, log_prob = self.get_action(observation) # 根据当前的actor的分布采样一个动作,以及生成该动作的log概率, action是一维向量
+				# observation:[state_dim=1]
+				# instant_reward:标量
 				observation, instant_reward, is_done, is_truncated, _ = self.env.step(action)
 
 				# Track recent reward, action, and action log probability
+				# episode_rewards:[timestep]
+				# batch_actions:[timestep, action_dim=3]
+				# batch_log_prob:[timestep]
 				episode_rewards.append(instant_reward) # 这个reward为即时奖励
 				batch_actions.append(action)
 				batch_log_probs.append(log_prob)
@@ -265,6 +273,8 @@ class PPO:
 					break
 
 			# Track episodic lengths and rewards
+			# batch_lens: [episode_num]
+			# batch_rewards: [episode_num, timesteps]
 			batch_lens.append(timestep_in_episode + 1)
 			batch_rewards.append(episode_rewards)
 
@@ -274,6 +284,8 @@ class PPO:
 		batch_log_probs = torch.tensor(batch_log_probs, dtype=torch.float)
 
 		#计算当前以及未来的所有的回报
+		# batch_rewards: [episode_num, timesteps]
+		# batch_reward_to_go: [episode_num*timesteps]
 		batch_reward_to_go = self.compute_rewards_to_go(batch_rewards)                                                              # ALG STEP 4
 
 		# Log the episodic returns and episodic lengths in this batch.
@@ -282,7 +294,7 @@ class PPO:
 
 		return batch_observation, batch_actions, batch_log_probs, batch_reward_to_go, batch_lens
 
-	def compute_rewards_to_go(self, batch_rewards):
+	def compute_rewards_to_go(self, batch_rewards:List[List[float]])->List[float]:
 		"""
 			计算当前以及未来的所有的回报
 			Compute the Reward-To-Go of each timestep in a batch given the rewards.
