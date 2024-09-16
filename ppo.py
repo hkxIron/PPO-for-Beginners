@@ -107,17 +107,20 @@ class PPO:
 			# batch_observation:[timesteps, state_dim=3]
 			# batch_actions: [timesteps, action_dim=3]
 			# state_value:[timesteps]
-			state_value, _ = self.evaluate(batch_observation, batch_actions)
+			state_value_t, _ = self.evaluate(batch_observation, batch_actions)
+
+			# 优势函数： Advantage(t) = Rt + gamma* V(t+1) - V(t)
+			#
 			# batch_reward_to_go: [timesteps]
 			# advantage_k: [timesteps]
-			advantage_k = batch_reward_to_go - state_value.detach()                                                                       # ALG STEP 5
+			advantage_t = batch_reward_to_go - state_value_t.detach()                                                                       # ALG STEP 5
 
 			# One of the only tricks I use that isn't in the pseudocode.
 			# Normalizing advantages isn't theoretically necessary,
 			# but in practice it decreases the variance of
 			# our advantages and makes convergence much more stable and faster.
 			# I added this because solving some environments was too unstable without it.
-			advantage_k = (advantage_k - advantage_k.mean()) / (advantage_k.std() + 1e-10) # 用均值方差归一化是额外添加的,会更稳定
+			advantage_t = (advantage_t - advantage_t.mean()) / (advantage_t.std() + 1e-10) # 用均值方差归一化是额外添加的,会更稳定
 
 			# This is the loop where we update our network for some n epochs
 			for _ in range(self.n_updates_per_iteration): # ALG STEP 6 & 7, 每次迭代更新模型10次
@@ -128,7 +131,7 @@ class PPO:
 				# batch_actions: [timesteps, action_dim=1]
 				# state_value: [timesteps]
 				# curr_log_probs: [timesteps]
-				state_value, curr_log_probs = self.evaluate(batch_observation, batch_actions)
+				state_value_t, curr_log_probs = self.evaluate(batch_observation, batch_actions)
 
 				# Calculate the ratio pi_theta(a_t | s_t) / pi_theta_k(a_t | s_t)
 				# NOTE: we just subtract the logs, which is the same as
@@ -145,8 +148,8 @@ class PPO:
 				# importance_ratios: [timesteps]
 				# advantage_k: [timesteps]
 				# surr1, surr2: [timesteps]
-				surr1 = importance_ratios * advantage_k
-				surr2 = torch.clamp(importance_ratios, 1 - self.clip, 1 + self.clip) * advantage_k
+				surr1 = importance_ratios * advantage_t
+				surr2 = torch.clamp(importance_ratios, 1 - self.clip, 1 + self.clip) * advantage_t
 
 				# Calculate actor and critic losses.
 				# NOTE: we take the negative min of the surrogate losses because we're trying to maximize
@@ -160,7 +163,7 @@ class PPO:
 				# state_value: [timesteps]
 				# batch_reward_to_go: [timesteps]
 				# critic_loss: 标量
-				critic_loss = nn.MSELoss()(state_value, batch_reward_to_go)
+				critic_loss = nn.MSELoss()(state_value_t, batch_reward_to_go)
 
 				# Calculate gradients and perform backward propagation for actor network
 				self.actor_optim.zero_grad()
@@ -259,7 +262,7 @@ class PPO:
 				# log_prob:标量
 				action, log_prob = self.get_action(observation) # 根据当前的actor的分布采样一个动作,以及生成该动作的log概率, action是一维向量
 				# observation:[state_dim=1]
-				# instant_reward:标量
+				# instant_reward:标量, 即时奖励来源于环境
 				observation, instant_reward, is_done, is_truncated, _ = self.env.step(action)
 
 				# Track recent reward, action, and action log probability
