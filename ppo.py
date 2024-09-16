@@ -121,6 +121,8 @@ class PPO:
 
 			# This is the loop where we update our network for some n epochs
 			for _ in range(self.n_updates_per_iteration): # ALG STEP 6 & 7, 每次迭代更新模型10次
+
+				# critic 对当前状态评价10次,并同时更新 actor, critic模型
 				# Calculate V_phi and pi_theta(a_t | s_t)
 				# batch_observation:[timesteps, state_dim=3]
 				# batch_actions: [timesteps, action_dim=1]
