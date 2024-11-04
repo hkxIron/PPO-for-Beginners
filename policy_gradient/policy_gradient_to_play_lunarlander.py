@@ -1,8 +1,10 @@
-
+import os.path
+import random
 from typing import *
 
 import gym
 import sys
+import time
 import numpy as np
 import torch
 from torch import nn
@@ -65,7 +67,7 @@ class PolicyNet(nn.Module):
         return action_prob
 
 def _get_cosine_with_hard_restarts_schedule_with_warmup_lr_lambda(
-    current_step: int, *, num_warmup_steps: int, num_training_steps: int, num_cycles: int=1
+    current_step: int, *, num_warmup_steps: int, num_training_steps: int, num_cycles: int=1, min_lr_ratio:float=0
 ):
     # 1. 如果current_step< num_warmup_steps,则从0一直增长，直到1,此时lr=lambda*init_lr=1*init_lr=init_lr
     # 2. 如果current_step>num_warmup_steps,则使用cos学习率进行减小直到0，当然可以控制cos循环次数
@@ -89,11 +91,11 @@ def _get_cosine_with_hard_restarts_schedule_with_warmup_lr_lambda(
         return float(current_step) / float(max(1, num_warmup_steps))
     progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
     if progress >= 1.0:
-        return 0.0
+        return min_lr_ratio
     return max(0.0, 0.5 * (1.0 + math.cos(math.pi * ((float(num_cycles) * progress) % 1.0))))
 
 class PolicyGradient():
-    def __init__(self, n_states_num:int=8, n_actions_num:int=4, base_learning_rate=0.01, reward_decay=0.95):
+    def __init__(self, n_states_num:int=8, n_actions_num:int=4, base_learning_rate=0.01, reward_decay=0.95, num_warmup_steps=200, num_training_steps=2*10000, min_lr_ratio=0.01):
         # 状态数   state是一个8维向量，分别是水平坐标x,垂直坐标y,水平速度,垂直速度,角度,角速度,腿1触地,腿2触地
         self.n_states_num = n_states_num
         # action是4维、离散，即什么都不做，发动左方向引擎，发动主机，发动右方向引擎。
@@ -106,37 +108,46 @@ class PolicyGradient():
         self.action_policy = PolicyNet(n_states_num, n_actions_num, 64)
         # 优化器
         self.optimizer = torch.optim.Adam(self.action_policy.parameters(), lr=base_learning_rate, betas=(0.9, 0.98), eps=1e-9)
-        lambda_func = partial(_get_cosine_with_hard_restarts_schedule_with_warmup_lr_lambda, num_warmup_steps=200, num_training_steps=2*10000, num_cycles=0.5)
+        lambda_func = partial(_get_cosine_with_hard_restarts_schedule_with_warmup_lr_lambda, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps, num_cycles=0.5, min_lr_ratio=min_lr_ratio)
         self.lr_scheduler = LambdaLR(optimizer=self.optimizer,
                                      lr_lambda=lambda_func)
         # 存储轨迹  存储数据为（每一次的reward，动作的概率）
         self.data = []
         self.loss_history = []
 
+    def save_model(self, file:str='model/lunar_lander.pkl'):
+        print(f"save model to: {file}")
+        torch.save(self.action_policy.state_dict(), file)
+
+    def load_model(self, file:str='model/lunar_lander.pkl'):
+        self.action_policy.load_state_dict(torch.load(file, map_location='cpu'))
+        torch.load(file)
+
     # 存储轨迹数据
-    def record_reward_and_action_prob(self, item:Tuple[float, torch.Tensor]):
+    def record_episode_data(self, item:Tuple[float, torch.Tensor]):
         # 记录r,log_P(a|s)
         self.data.append(item)
 
     def train_net_by_episode(self):
         # 计算梯度并更新策略网络参数。tape为梯度记录器
         discount_reward = 0  # 终结状态的初始回报为0
-        policy_loss = []
-        for instant_reward, log_prob in self.data[::-1]:  # 逆序遍历
+        episode_loss = []
+        for instant_reward, log_action_prob in self.data[::-1]:  # 逆序遍历
+            # discount_reward为float类型，不会有梯度回传
             discount_reward = instant_reward + self.gamma * discount_reward  # 计算每个时间戳上的回报
-            # 当前步的reward为产生动作的概率与回报之积
-            step_reward = log_prob * discount_reward
+            # 当前步的reward为产生动作的概率对数与回报之积,对应于policy_gradient中的:
+            # policy_gradient = R(t^n) * grad(log(P(a|s)))
+            step_reward = discount_reward * log_action_prob
             # 每个时间戳都计算一次梯度
             loss = -step_reward
-            policy_loss.append(loss)
+            episode_loss.append(loss)
         # ----------------
         self.optimizer.zero_grad()
-        policy_loss = torch.cat(policy_loss).sum()  # 求和
-        # print('policy_loss:', policy_loss.item())
+        episode_loss = torch.cat(episode_loss).sum()  # 求和
         # 反向传播
-        policy_loss.backward()
+        episode_loss.backward()
         self.optimizer.step()
-        self.loss_history.append(policy_loss.item())
+        self.loss_history.append(episode_loss.item())
         # print('cost_his:', self.cost_his)
         self.data = []  # 清空轨迹
 
@@ -160,27 +171,37 @@ class PolicyGradient():
         plt.xlabel('training steps')
         plt.show()
 
+def set_seed():
+    seed = 1234
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.random.manual_seed(seed)
+
 def train():
     env = gym.make('LunarLander-v2')
     print_interval = 100
-    policy_gradient = PolicyGradient(n_states_num=8, n_actions_num=4, base_learning_rate=0.01)
+
+    set_seed()
+    policy_gradient = PolicyGradient(n_states_num=8, n_actions_num=4, base_learning_rate=0.01, num_warmup_steps=200, num_training_steps=10000, min_lr_ratio=0.01)
     average_reward:List[float] = []
     running_reward=None
+    max_episode_num = 2*10000
+    max_seq_len=1001
+    old_reward_weight = 0.95
 
-    for n_episode in range(2*10000): # 玩1000局游戏
+    for n_episode in range(max_episode_num): # 玩1000局游戏
         state, _ = env.reset()  # 回到游戏初始状态，返回s0
         episode_reward = 0
-        for t in range(10001):  # CartPole-v1 forced to terminates at 1000 step.每局游戏下1001步
+        for t in range(max_seq_len):  # CartPole-v1 forced to terminates at 1000 step.每局游戏下1001步
             # 根据状态 传入神经网络 选择动作
-            action, log_prob = policy_gradient.choose_action(state)
+            action, log_action_prob = policy_gradient.choose_action(state)
             # print(action, log_prob)
-            # 与环境交互
+            # 与环境交互,得到新的状态
             new_state, reward, done, truncated, info = env.step(action)
-            # s_prime, reward, done, info = env.step(action)
-            if n_episode > 10000:
+            if n_episode > max_seq_len-1:
                 env.render()
             # 记录动作a和动作产生的奖励r
-            policy_gradient.record_reward_and_action_prob((reward, log_prob))
+            policy_gradient.record_episode_data((reward, log_action_prob))
             state = new_state  # 刷新状态
             episode_reward += reward
             if done:  # 当前episode终止
@@ -188,21 +209,24 @@ def train():
             # episode终止后，训练一次网络
         # ------------------------------
         if running_reward is not None:
-            running_reward = 0.05 * episode_reward + (1 - 0.05) * running_reward
+            running_reward = (1 - old_reward_weight) * episode_reward + old_reward_weight * running_reward
         else:
             running_reward = episode_reward
         average_reward.append(running_reward)
 
-        # 交互完成后 进行学习
+        # 交互完成后,进行策略学习
         policy_gradient.train_net_by_episode()
         policy_gradient.lr_scheduler.step() # 重新计算lr步长
 
         if n_episode % print_interval == 0:
-            print('Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f} lr:{:.6f}'.format( n_episode, episode_reward, running_reward, policy_gradient.lr_scheduler.get_last_lr()[0]))
+            print('{} Episode:{}\tLast reward: {:.2f}\tAverage reward: {:.2f}\tlr:{:.6f}'.format(time.strftime("%H:%M:%S"), n_episode, episode_reward, running_reward, policy_gradient.lr_scheduler.get_last_lr()[0]))
+            if os.path.exists('save_model.txt'): # 随时手动保存模型
+                policy_gradient.save_model()
+
         if running_reward > env.spec.reward_threshold:  # 大于游戏的最大阈值时，退出游戏
             print("Solved! Running reward is now {} and "
                   "the last episode runs to {} time steps!".format(running_reward, t))
-            torch.save(policy_gradient.action_policy.state_dict(), 'pg.pkl')
+            policy_gradient.save_model()
             break
 
     # 所有episode训练完，画一下reward图
