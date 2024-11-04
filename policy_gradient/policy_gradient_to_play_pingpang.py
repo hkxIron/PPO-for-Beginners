@@ -2,6 +2,7 @@
 """
 https://karpathy.github.io/2016/05/31/rl/
 
+author:
 andrew karpathy
 """
 
