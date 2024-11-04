@@ -1,6 +1,8 @@
 """ Trains an agent with (stochastic) Policy Gradients on Pong. Uses OpenAI Gym. """
 """
 https://karpathy.github.io/2016/05/31/rl/
+
+andrew karpathy
 """
 
 import numpy as np
@@ -31,14 +33,15 @@ rmsprop_cache = {k: np.zeros_like(v) for k, v in model.items()}  # rmsprop memor
 def sigmoid(x):
     return 1.0 / (1.0 + np.exp(-x))  # sigmoid "squashing" function to interval [0,1]
 
-def prepro(I):
+def prepro(I:np.array):
     """ prepro 210x160x3 uint8 frame into 6400 (80x80) 1D float vector """
+    #print(I)
     I = I[35:195]  # crop
     I = I[::2, ::2, 0]  # downsample by factor of 2
     I[I == 144] = 0  # erase background (background type 1)
     I[I == 109] = 0  # erase background (background type 2)
     I[I != 0] = 1  # everything else (paddles, ball) just set to 1
-    return I.astype(np.float).ravel()
+    return I.astype(np.float32).ravel()
 
 
 def discount_rewards(r:np.array)->np.array:
@@ -53,7 +56,7 @@ def discount_rewards(r:np.array)->np.array:
     return discounted_r
 
 
-def policy_forward(x):
+def policy_forward(x:np.array):
     # p=sigmoid(W2*relu(W1*x))
     h = np.dot(model['W1'], x)
     h[h < 0] = 0  # ReLU nonlinearity
@@ -74,11 +77,13 @@ def policy_backward(episode_hidden_states, d_episode_logprobs):
 
 
 print("all_envs:", gym.envs.registry.keys())
-env = gym.make("Pong-v1") # 打乒乓球
+# 请先安装包依赖： pip install "gym[atari, accept-rom-license]"
+env = gym.make("ALE/Pong-v5") # 打乒乓球
+#env = gym.make("Pong-v1") # 打乒乓球
 #env = gym.make("Pendulum-v1") # 打乒乓球
 #env = gym.make("LunarLander-v2") # 打乒乓球
 
-observation = env.reset()
+observation, info = env.reset()
 prev_x = None  # used in computing the difference frame
 xs, hidden_states, dlogps, episode_reward_list = [], [], [], []
 running_reward = None
@@ -107,7 +112,7 @@ while True:
     dlogps.append(y - action_prob) # mse差值
 
     # step the environment and get new measurements
-    observation, reward, episode_is_done, info = env.step(action)
+    observation, reward, episode_is_done, truncated, info = env.step(action)
     reward_sum += reward
 
     episode_reward_list.append(reward)  # record reward (has to be done after we call step() to get reward for previous action)
@@ -126,8 +131,8 @@ while True:
         # compute the discounted reward backwards through time
         discounted_eposide_reward = discount_rewards(episode_rewards)
         # standardize the rewards to be unit normal (helps control the gradient estimator variance)
-        discounted_eposide_reward -= np.mean(discounted_eposide_reward)
-        discounted_eposide_reward /= np.std(discounted_eposide_reward)
+        discounted_eposide_reward -= np.mean(discounted_eposide_reward) # 减去该局游戏中的均值
+        discounted_eposide_reward /= np.std(discounted_eposide_reward) # 除以该局游戏中的方差
 
         # policy gradient:
         # grad(x) = discounted_reward * dlogp(x)
@@ -152,8 +157,8 @@ while True:
             pickle.dump(model, open('save.p', 'wb'))
 
         reward_sum = 0
-        observation = env.reset()  # reset env
+        observation, info = env.reset()  # reset env
         prev_x = None
 
     if reward != 0:  # Pong has either +1 or -1 reward exactly when game ends.
-        print('ep %d: game finished, reward: %f' % (episode_number, reward)) + ('' if reward == -1 else ' !!!!!!!!')
+        print('ep %d: game finished, reward: %f' % (episode_number, reward))

@@ -131,7 +131,7 @@ class PolicyGradient():
     def train_net_by_episode(self):
         # 计算梯度并更新策略网络参数。tape为梯度记录器
         discount_reward = 0  # 终结状态的初始回报为0
-        episode_loss = []
+        episode_loss_list = []
         for instant_reward, log_action_prob in self.data[::-1]:  # 逆序遍历
             # discount_reward为float类型，不会有梯度回传
             discount_reward = instant_reward + self.gamma * discount_reward  # 计算每个时间戳上的回报
@@ -140,10 +140,15 @@ class PolicyGradient():
             step_reward = discount_reward * log_action_prob
             # 每个时间戳都计算一次梯度
             loss = -step_reward
-            episode_loss.append(loss)
+            episode_loss_list.append(loss)
+
         # ----------------
         self.optimizer.zero_grad()
-        episode_loss = torch.cat(episode_loss).sum()  # 求和
+        episode_loss = torch.cat(episode_loss_list)
+        episode_loss_detach = episode_loss.detach()
+        episode_loss -= episode_loss_detach.mean() # 减去均值，即advantage
+        episode_loss /=  episode_loss_detach.std() # 除方差，一般并没有这项,andrew karpathy大神为了稳定性才添加
+        episode_loss = episode_loss.sum()# 求和
         # 反向传播
         episode_loss.backward()
         self.optimizer.step()
