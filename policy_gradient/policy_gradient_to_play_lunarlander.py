@@ -245,7 +245,7 @@ def train():
 
         if n_episode % print_interval == 0:
             cur_time=time.time()
-            print('{} time_cost:{:4f}\tbuffer_size:{}\tEpisode:{}\tLast reward: {:.2f}\tAverage reward: {:.2f}\tlr:{:.6f}'.format(time.strftime("%H:%M:%S"),
+            print('{} time_cost:{:.2f}\tbuffer_size:{}\tEpisode:{}\tLast reward: {:.2f}\tAverage reward: {:.2f}\tlr:{:.6f}'.format(time.strftime("%H:%M:%S"),
                                                                                                                            cur_time-last_time,
                                                                                                                            buffer_size,
                                                                                                                            n_episode,
