@@ -39,7 +39,7 @@ Episode 480	Last reward: 50.65	Average reward: 35.91
 
 Obs：这个游戏环境有八个观测值，分别是水平坐标x，垂直坐标y，水平速度，垂直速度，角度，角速度，腿1触地，腿2触地；
 
-Action：agent可以采取四种离散行动，分别是什么都不做，发动左方向引擎喷射，发动主引擎向下喷射，发动右方向引擎喷射。
+Action：agent可以采取四种离散行动，分别是什么都不做，发动左方向引擎喷射，发动主引擎向下喷射，发动右方向引擎喷射，是一个离散的动作。
 
 Reward：小艇坠毁得-100分；小艇成功着陆在两个黄色旗帜之间得100~140分；喷射主引擎向下喷火每次得-0.3分；小艇最终完全静止则再得100分；每条腿着地各得10分。
 
@@ -69,7 +69,8 @@ class PolicyNet(nn.Module):
         # Initialize parameters with Glorot / fan_avg.
         for p in self.net.parameters():
             if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
+                #nn.init.xavier_uniform_(p)
+                nn.init.kaiming_uniform_(p)
 
     def forward(self, x:torch.Tensor):
         # 状态输入s的shape为向量：[batch, n_state_num]
@@ -105,7 +106,7 @@ def _get_cosine_with_hard_restarts_schedule_with_warmup_lr_lambda(
     return max(0.0, 0.5 * (1.0 + math.cos(math.pi * ((float(num_cycles) * progress) % 1.0))))
 
 class PolicyGradient():
-    def __init__(self, n_states_num:int=8, n_actions_num:int=4, base_learning_rate=0.01, reward_decay=0.95, num_warmup_steps=200, num_training_steps=2*10000, min_lr_ratio=0.01):
+    def __init__(self, n_states_num:int=8, n_actions_num:int=4, base_learning_rate=0.01, reward_decay=0.95, num_warmup_steps=1000, num_training_steps=2*10000, min_lr_ratio=0.05):
         # 状态数   state是一个8维向量，分别是水平坐标x,垂直坐标y,水平速度,垂直速度,角度,角速度,腿1触地,腿2触地
         self.n_states_num = n_states_num
         # action是4维、离散，即什么都不做，发动左方向引擎，发动主机，发动右方向引擎。
@@ -115,7 +116,7 @@ class PolicyGradient():
         # gamma
         self.gamma = reward_decay
         # 策略网络
-        self.action_policy = PolicyNet(n_states_num, n_actions_num, 10)
+        self.action_policy = PolicyNet(n_states_num, n_actions_num, 30)
         # 优化器
         self.optimizer = torch.optim.Adam(self.action_policy.parameters(), lr=base_learning_rate, betas=(0.9, 0.98), eps=1e-9)
         lambda_func = partial(_get_cosine_with_hard_restarts_schedule_with_warmup_lr_lambda, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps, num_cycles=0.5, min_lr_ratio=min_lr_ratio)
@@ -164,7 +165,7 @@ class PolicyGradient():
         # 减去均值，即advantage
         # 除方差，一般并没有这项,andrew karpathy大神为了稳定性自行添加
         episode_loss = (episode_loss - episode_loss_detach.mean())/episode_loss_detach.std()
-        episode_loss = episode_loss.sum() # 求和
+        episode_loss = episode_loss.mean() # 求平均，以防止总是将游戏action动作拉长，以获取更高的奖励
         #episode_loss = episode_loss.mean() # 求和
 
         # 反向传播
@@ -204,9 +205,9 @@ def train():
     set_seed()
 
     print_interval = 20
-    policy = PolicyGradient(n_states_num=8, n_actions_num=4, base_learning_rate=0.01, num_warmup_steps=200, num_training_steps=10000, min_lr_ratio=0.01)
+    policy = PolicyGradient(n_states_num=8, n_actions_num=4, base_learning_rate=0.01, num_warmup_steps=200, num_training_steps=400, min_lr_ratio=0.01)
     running_reward=None
-    max_episode_num = 2*10000
+    max_episode_num = 10000
     max_seq_len=1001
     old_reward_weight = 0.95
     average_episode_reward: List[float] = []

@@ -102,6 +102,7 @@ while True:
     # forward the policy network and sample an action from the returned probability
     action_prob, hidden_state = policy_forward(x) # 预测采取不同动作的概率
 
+    # 从当前的策略模型中采样一个action
     # action只能取两个值：2和3
     action = 2 if np.random.uniform() < action_prob else 3  # roll the dice, 骰子
 

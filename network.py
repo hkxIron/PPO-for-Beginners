@@ -2,6 +2,7 @@
 	This file contains a neural network module for us to
 	define our actor and critic networks in PPO.
 """
+from typing import Union
 
 import torch
 from torch import nn
@@ -12,7 +13,7 @@ class FeedForwardNN(nn.Module):
 	"""
 		A standard in_dim-64-64-out_dim Feed Forward Neural Network.
 	"""
-	def __init__(self, in_dim:int, out_dim:int):
+	def __init__(self, in_dim:int, out_dim:int, hidden_dim=64):
 		"""
 			Initialize the network and set up the layers.
 
@@ -24,13 +25,12 @@ class FeedForwardNN(nn.Module):
 				None
 		"""
 		super(FeedForwardNN, self).__init__()
-
 		# 一个三层的网络
-		self.layer1 = nn.Linear(in_dim, 64)
-		self.layer2 = nn.Linear(64, 64)
-		self.layer3 = nn.Linear(64, out_dim)
+		self.layer1 = nn.Linear(in_dim, hidden_dim)
+		self.layer2 = nn.Linear(hidden_dim, hidden_dim)
+		self.layer3 = nn.Linear(hidden_dim, out_dim)
 
-	def forward(self, observation:np.ndarray):
+	def forward(self, observation:Union[np.ndarray, torch.Tensor]):
 		"""
 			Runs a forward pass on the neural network.
 

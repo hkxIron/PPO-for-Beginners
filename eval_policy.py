@@ -5,8 +5,11 @@
 	which resides in ppo.py. Thus, we can test our trained policy without 
 	relying on ppo.py.
 """
+from typing import Type
+
 from torch import nn
 from gym import Env
+from network import FeedForwardNN
 
 def _log_summary(ep_len, ep_ret, ep_num):
 		"""
@@ -32,14 +35,16 @@ def _log_summary(ep_len, ep_ret, ep_num):
 
 def rollout(policy, env, render):
 	"""
+		收集数据
+
 		Returns a generator to roll out each episode given a trained policy and
-		environment to test on. 
+		environment to test on.
 
 		Parameters:
 			policy - The trained policy to test
 			env - The environment to evaluate the policy on
 			render - Specifies whether to render or not
-		
+
 		Return:
 			A generator object rollout, or iterable, which will return the latest
 			episodic length and return on each iteration of the generator.
@@ -70,7 +75,7 @@ def rollout(policy, env, render):
 				env.render()
 
 			# Query deterministic action from policy and run it
-			action = policy(observation).detach().numpy()
+			action = policy.forward(observation).detach().numpy()
 			observation, reward, is_done, is_truncated, _ = env.step(action)
 
 			# Sum all episodic rewards as we go along
@@ -82,7 +87,7 @@ def rollout(policy, env, render):
 		# returns episodic length and return in this iteration
 		yield ep_len, ep_ret
 
-def eval_policy(policy:nn.Module, env:Env, render=False):
+def eval_policy(policy:FeedForwardNN, env:Env, render=False):
 	"""
 		The main function to evaluate our policy with. It will iterate a generator object
 		"rollout", which will simulate each episode and return the most recent episode's

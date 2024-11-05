@@ -1,7 +1,3 @@
-"""
-	This file is the executable for running PPO. It is based on this medium article: 
-	https://medium.com/@eyyu/coding-ppo-from-scratch-with-pytorch-part-1-4-613dfc1b14c8
-"""
 from typing import *
 
 import gym
@@ -15,7 +11,27 @@ from eval_policy import eval_policy
 from gym import Env
 from torch import nn
 
-def train(env:Env, hyperparameters:Dict[str, Any], actor_model_file, critic_model_file):
+
+"""
+This file is the executable for running PPO. It is based on this medium article: 
+https://medium.com/@eyyu/coding-ppo-from-scratch-with-pytorch-part-1-4-613dfc1b14c8
+
+中文blog:
+ppo:
+https://www.cnblogs.com/xingzheai/p/15931681.html
+
+policy gradient:
+https://www.cnblogs.com/xingzheai/p/15826847.html
+
+案例：倒立摆问题。钟摆以随机位置开始，目标是将其向上摆动，使其保持直立。 测试环境：Pendulum-v1
+
+动作：往左转还是往右转，用力矩来衡量，即力乘以力臂。范围[-2,2]：（连续空间）
+
+状态：cos(theta), sin(theta) , thetadot。
+
+奖励：越直立拿到的奖励越高，越偏离，奖励越低。奖励的最大值为0。
+"""
+def train(env:Env, hyperparameters:Dict[str, Any], actor_model_file:str, critic_model_file:str):
 	"""
 		Trains the model.
 
@@ -109,7 +125,8 @@ def main(args):
 			  }
 
 	"""
-	Pendulum-v1
+	Pendulum-v1 单摆模型
+	案例：倒立摆问题。钟摆以随机位置开始，目标是将其向上摆动，使其保持直立。 测试环境：Pendulum-v1
 	状态：cos(theta), sin(theta) , thetadot（角速度）, 是一个3维向量
 	theta:杆子的角度， 竖直为0度，顺时针方向来计算角度，所以角度范围是[0,360],例如图中大概是140度的样子
 	
@@ -117,7 +134,7 @@ def main(args):
 	env.action_space:
 	Box([-2], [-2,], (1,), float32)
 	
-	奖励：
+	奖励：越直立拿到的奖励越高，越偏离，奖励越低。奖励的最大值为0。
 	def angle_normalize(x):
 		return ((x+np.pi)%(2*np.pi)) - np.pi	
 		
