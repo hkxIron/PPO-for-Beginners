@@ -23,6 +23,9 @@ https://www.cnblogs.com/xingzheai/p/15931681.html
 policy gradient:
 https://www.cnblogs.com/xingzheai/p/15826847.html
 
+ddpg请见：
+ git@github.com:hkxIron/RL-algorithms.git
+
 案例：倒立摆问题。钟摆以随机位置开始，目标是将其向上摆动，使其保持直立。 测试环境：Pendulum-v1
 
 动作：往左转还是往右转，用力矩来衡量，即力乘以力臂。范围[-2,2]：（连续空间）

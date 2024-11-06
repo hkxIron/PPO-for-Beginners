@@ -184,16 +184,21 @@ class PPO:
 				# critic_loss: 标量
 				critic_loss = nn.MSELoss().forward(curr_state_value, batch_discount_reward_k) # batch_discount_reward_k是与环境交互得来，是相对真实的reward
 
+				"""
+				 在PyTorch中，当执行backward()时，若retain_graph=False，计算图会被释放，导致无法进行第二次反向传播。
+				 retain_graph=True用于在有多个损失函数且需要分别计算梯度时，如神经网络风格迁移中Content Loss和Style Loss的情况，
+				 防止中间变量(即激活值)被释放，确保两个loss的反向传播互不影响。
+				"""
 				# 计算梯度并对actor网络进行反向传播
 				# Calculate gradients and perform backward propagation for actor network
 				self.actor_optimizer.zero_grad()
-				actor_loss.backward(retain_graph=True) # 注意：不能清空反向传播时的graph, 因为critic反向传播时还会使用
+				actor_loss.backward(retain_graph=True) # 注意：不能清空反向传播时的graph, 因为critic反向传播时还会使用, 原因是他们的梯度都会传到actor网络中去
 				self.actor_optimizer.step()
 
 				# 计算梯度并对critic网络进行反向传播
 				# Calculate gradients and perform backward propagation for critic network
-				self.critic_optimizer.zero_grad()
-				critic_loss.backward() # 注意：此时可以清空反向传播时的graph
+				self.critic_optimizer.zero_grad() # 最后一个 backward() 不要加 retain_graph 参数，这样每次更新完成后会释放占用的内存，也就不会出现越来越慢的情况了
+				critic_loss.backward() # 注意：此时可以清空反向传播时的graph，与actor_loss一样，他们的梯度也会传到actor网络中去
 				self.critic_optimizer.step()
 
 				"""
@@ -362,6 +367,7 @@ class PPO:
 				action - the action to take, as a numpy array
 				log_prob - the log probability of the selected action in the distribution
 		"""
+		# 梯度回传：log_prob -> dist -> mean -> actor
 		# Query the actor network for a mean action
 		mean = self.actor.forward(observation)
 
@@ -373,7 +379,7 @@ class PPO:
 		dist = MultivariateNormal(mean, self.cov_mat)
 
 		# Sample an action from the distribution
-		sample_action = dist.sample()
+		sample_action = dist.sample() # sample是no_grad()上下文中的
 
 		# Calculate the log probability for that action
 		log_prob = dist.log_prob(sample_action) # Returns the log of the probability density/mass function evaluated at value.
